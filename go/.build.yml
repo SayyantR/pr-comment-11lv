@@ -1,0 +1,34 @@
+image: "nixos/unstable"
+sources:
+  - https://github.com/diamondburned/gotktrix
+packages:
+  - nixos.git
+  - nixos.go_1_17
+  - nixos.gotools
+secrets:
+  - 82568347-1c9e-406e-8de0-525ee7dd21e2
+tasks:
+  - gomod: |-
+      cd gotktrix
+      go mod tidy
+
+      if [[ $(git status --porcelain) ]]; then
+        git diff | cat
+        exit 1
+      fi
+
+  - format: |-
+      cd gotktrix
+      deps="$(for d in $(go list -f {{.Dir}} ./...); { goimports -l $d; })"
+      [[ ! "$deps" ]] || printf "Unformatted files: \n%s\n" "$deps"
+
+  - test-build: |-
+      [[ $GITHUB_REF && $GITHUB_REF != *"/release" ]] && exit
+      out="$(cd gotktrix && nix-build .nix -j1 --argstr action build-package)"
+
+  - tagged-build: |-
+      [[ $GITHUB_REF != *"/tags/"* ]] && exit
+      cd gotktrix
+
+      $(nix-build .nix -j1 --argstr action upload-artifacts) diamondburned/gotktrix \
+      $(nix-build .nix -j1 --argstr action build-cross)
